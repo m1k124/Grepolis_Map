@@ -75,3 +75,7 @@ Ils n'ont rien a installer.
 - Si l'usage devient intensif, il faudra peut-etre passer sur une petite offre payante.
 - Le cache monde reste dans le navigateur de chaque utilisateur, pas sur Render.
 - Les donnees Grepolis ne sont pas stockees durablement par le serveur.
+- Le proxy public est limite a `fr114` par defaut.
+- Variables optionnelles :
+  - `ALLOWED_SERVERS` : liste de serveurs autorises, separes par des virgules. Exemple : `fr114`.
+  - `RATE_LIMIT_MAX_REQUESTS` : nombre maximal d'appels API par IP et par heure. Valeur par defaut : `60`.

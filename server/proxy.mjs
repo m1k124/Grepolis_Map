@@ -8,10 +8,15 @@ const port = Number(process.env.PORT ?? 5175);
 const distDir = resolve(fileURLToPath(new URL("../dist", import.meta.url)));
 const tableNames = ["players", "alliances", "islands", "towns"];
 const requestTimeoutMs = 15000;
+const maxTableBytes = 25 * 1024 * 1024;
+const rateLimitWindowMs = 60 * 60 * 1000;
+const rateLimitMaxRequests = Number(process.env.RATE_LIMIT_MAX_REQUESTS ?? 60);
+const allowedServerIds = new Set((process.env.ALLOWED_SERVERS ?? "fr114").split(",").map((serverId) => serverId.trim().toLowerCase()));
 const allowedOrigins = new Set(["http://127.0.0.1:5174", "http://localhost:5174"]);
+const apiRequestsByClient = new Map();
 
 const server = createServer(async (request, response) => {
-  setCorsHeaders(request, response);
+  setSecurityHeaders(request, response);
 
   if (request.method === "OPTIONS") {
     response.writeHead(204);
@@ -29,6 +34,19 @@ const server = createServer(async (request, response) => {
   const match = url.pathname.match(/^\/api\/world\/([a-z]{2}\d+)$/i);
   if (request.method === "GET" && match) {
     const serverId = match[1].toLowerCase();
+
+    if (!allowedServerIds.has(serverId)) {
+      sendJson(response, 403, {
+        error: `Serveur non autorise : ${serverId}.`,
+        allowedServers: Array.from(allowedServerIds),
+      });
+      return;
+    }
+
+    if (!consumeRateLimit(clientKey(request))) {
+      sendJson(response, 429, { error: "Trop de requetes. Reessaie plus tard." });
+      return;
+    }
 
     try {
       const tables = await fetchWorldTables(serverId);
@@ -83,13 +101,23 @@ async function fetchText(url) {
       throw new Error(`${url} a repondu ${response.status}`);
     }
 
-    return await response.text();
+    const contentLength = Number(response.headers.get("content-length") ?? 0);
+    if (contentLength > maxTableBytes) {
+      throw new Error(`${url} depasse la taille maximale autorisee`);
+    }
+
+    const text = await response.text();
+    if (new TextEncoder().encode(text).byteLength > maxTableBytes) {
+      throw new Error(`${url} depasse la taille maximale autorisee`);
+    }
+
+    return text;
   } finally {
     clearTimeout(timeout);
   }
 }
 
-function setCorsHeaders(request, response) {
+function setSecurityHeaders(request, response) {
   const origin = request.headers.origin;
   if (origin && allowedOrigins.has(origin)) {
     response.setHeader("access-control-allow-origin", origin);
@@ -97,6 +125,12 @@ function setCorsHeaders(request, response) {
   response.setHeader("access-control-allow-methods", "GET, OPTIONS");
   response.setHeader("access-control-allow-headers", "content-type");
   response.setHeader("vary", "origin");
+  response.setHeader("x-content-type-options", "nosniff");
+  response.setHeader("referrer-policy", "no-referrer");
+  response.setHeader(
+    "content-security-policy",
+    "default-src 'self'; script-src 'self'; connect-src 'self' https://*.grepolis.com; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
+  );
 }
 
 function sendJson(response, status, payload) {
@@ -105,6 +139,32 @@ function sendJson(response, status, payload) {
     "cache-control": "no-store",
   });
   response.end(JSON.stringify(payload));
+}
+
+function clientKey(request) {
+  const forwardedFor = request.headers["x-forwarded-for"];
+  if (typeof forwardedFor === "string" && forwardedFor.trim()) {
+    return forwardedFor.split(",")[0].trim();
+  }
+
+  return request.socket.remoteAddress ?? "unknown";
+}
+
+function consumeRateLimit(key) {
+  const now = Date.now();
+  const current = apiRequestsByClient.get(key);
+
+  if (!current || current.resetAt <= now) {
+    apiRequestsByClient.set(key, { count: 1, resetAt: now + rateLimitWindowMs });
+    return true;
+  }
+
+  if (current.count >= rateLimitMaxRequests) {
+    return false;
+  }
+
+  current.count += 1;
+  return true;
 }
 
 async function serveStatic(url, response) {

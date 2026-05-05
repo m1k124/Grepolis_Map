@@ -346,5 +346,7 @@ Le projet sera considere exploitable en v1 quand :
 ## Deploiement public no-code
 
 Statut : prepare le 2026-05-05. Le serveur Node sert maintenant a la fois le frontend compile `dist` et le proxy `/api/world/:serverId`. En local developpement, l'app utilise encore le proxy `127.0.0.1:5175`; en production, elle utilise l'origine courante. Ajout de `npm start`, `render.yaml` et `DEPLOY.md` pour un deploiement Render Free.
+
+Audit securite du 2026-05-05 : ports locaux 5174/5175 fermes apres tests, aucune cle/API detectee dans le depot, `npm audit` sans vulnerabilite, proxy public limite a `fr114` par defaut, limite de requetes par IP, limite de taille des tables Grepolis et en-tetes HTTP de securite.
 - une carte visible peut etre exportee en PNG ;
 - les erreurs principales sont comprehensibles pour l'utilisateur.
