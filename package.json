@@ -1,0 +1,20 @@
+{
+  "name": "grepolis-map",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "proxy": "node server/proxy.mjs",
+    "start": "node server/proxy.mjs",
+    "build": "tsc && vite build",
+    "check": "npm run typecheck && npm run build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  }
+}
